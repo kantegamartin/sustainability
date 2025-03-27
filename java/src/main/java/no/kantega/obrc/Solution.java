@@ -25,6 +25,7 @@ import java.util.stream.IntStream;
 
 public class Solution {
     private static final String FILE = "./measurements.txt";
+    private static final char CHAR0 = '0';
 
     public static void main(String[] args) throws Exception
     {
@@ -62,14 +63,28 @@ public class Solution {
                     buffer[i++] = b;
                 }
 
-                var value = new byte[5];
-                var j = 0;
-                while ((b = bb.get()) != '\n') {
-                    value[j++] = b;
+                int value;
+                byte b1 = bb.get();
+                byte b2 = bb.get();
+                byte b3 = bb.get();
+                byte b4 = bb.get();
+                if (b2 == '.') {// value is n.n
+                    value = ((b1 - CHAR0) * 10 + b3 - CHAR0);
+                    // b4 == \n
                 }
-
-                String valueString = new String(value, 0, j, StandardCharsets.UTF_8);
-                stationList.add(new String(buffer, 0, i, StandardCharsets.UTF_8), Double.parseDouble(valueString));
+                else {
+                    if (b4 == '.') { // value is -nn.n
+                        value = -((b2 - CHAR0) * 100 + (b3 - CHAR0) * 10 + bb.get() - CHAR0);
+                    }
+                    else if (b1 == '-') { // value is -n.n
+                        value = -((b2 - CHAR0) * 10 + b4 - CHAR0);
+                    }
+                    else { // value is nn.n
+                        value = ((b1 - CHAR0) * 100 + (b2 - CHAR0) * 10 + b4 - CHAR0);
+                    }
+                    bb.get(); // new line
+                }
+                stationList.add(new String(buffer, 0, i, StandardCharsets.UTF_8), value);
             }
 
             return stationList;
@@ -82,12 +97,12 @@ public class Solution {
     private static final class Station {
         private final String name;
 
-        private double min;
-        private double max;
-        private double total;
+        private int min;
+        private int max;
+        private int total;
         private int count;
 
-        public Station(String name, double value) {
+        public Station(String name, int value) {
             this.name = name;
             min = max = total = value;
             count = 1;
@@ -95,10 +110,10 @@ public class Solution {
 
         @Override
         public String toString() {
-            return name + "=" + min + "/" + Math.round(10.0 * total / count) / 10.0 + "/" + max;
+            return name + "=" + min / 10.0 + "/" + Math.round(((double) total) / count) / 10.0 + "/" + max / 10.0;
         }
 
-        private void append(double min, double max, double total, int count) {
+        private void append(int min, int max, int total, int count) {
             if (min < this.min)
                 this.min = min;
             if (max > this.max)
@@ -126,7 +141,7 @@ public class Solution {
             }
         }
 
-        public boolean add(String name, double value) {
+        public boolean add(String name, int value) {
             return add(new Station(name, value));
         }
 
