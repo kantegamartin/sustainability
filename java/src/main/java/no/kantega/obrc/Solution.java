@@ -16,8 +16,10 @@
 package no.kantega.obrc;
 
 import java.io.File;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 
@@ -32,12 +34,33 @@ public class Solution {
         System.out.println(String.join("\n", results));
     }
 
-    private static StationList parse(File file) throws Exception {
-        StationList stationList = new StationList();
-        Files.lines(Paths.get(file.getAbsolutePath()))
-                .map(l -> new Station(l.split(";")))
-                .forEach(stationList::add);
-        return stationList;
+    private static StationList parse(File file) {
+        try (var fileChannel = (FileChannel) Files.newByteChannel(file.toPath(), StandardOpenOption.READ)) {
+            long fileLength = file.length();
+            var bb = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileLength);
+            StationList stationList = new StationList();
+            var buffer = new byte[100];
+            while (bb.position() < fileLength) {
+                byte b;
+                var i = 0;
+                while ((b = bb.get()) != ';') {
+                    buffer[i++] = b;
+                }
+
+                var value = new byte[5];
+                var j = 0;
+                while ((b = bb.get()) != '\n') {
+                    value[j++] = b;
+                }
+                String valueString = new String(value, 0, j, StandardCharsets.UTF_8);
+                stationList.add(new String(buffer, 0, i, StandardCharsets.UTF_8), Double.parseDouble(valueString));
+            }
+
+            return stationList;
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final class Station {
@@ -47,10 +70,9 @@ public class Solution {
         private double total;
         private int count;
 
-        public Station(String[] parts)
-        {
-            name = parts[0];
-            min = max = total = Double.parseDouble(parts[1]);
+        public Station(String name, double value) {
+            this.name = name;
+            min = max = total = value;
             count = 1;
         }
 
@@ -76,13 +98,19 @@ public class Solution {
     private static class StationList implements Iterable<Station> {
         private final Map<String, Station> array = new HashMap<>();
 
-        public void add(Station station) {
+        public boolean add(Station station) {
             var existing = array.get(station.name);
             if (existing == null) {
                 array.put(station.name, station);
+                return false;
             } else {
                 existing.merge(station);
+                return true;
             }
+        }
+
+        public boolean add(String name, double value) {
+            return add(new Station(name, value));
         }
 
         public String[] toStringArray() {
