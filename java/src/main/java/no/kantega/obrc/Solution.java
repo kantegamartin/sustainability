@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
-
+import java.util.stream.IntStream;
 
 public class Solution {
     private static final String FILE = "./measurements.txt";
@@ -29,18 +29,32 @@ public class Solution {
     public static void main(String[] args) throws Exception
     {
         var file = new File(args.length > 0 ? args[0] : FILE);
-        var results = parse(file).toStringArray();
+        var fileSize = file.length();
+        var numberOfProcessors = Runtime.getRuntime().availableProcessors();
+        var segmentSize = (int) Math.min(Integer.MAX_VALUE, fileSize / numberOfProcessors); // bytebuffer position is an int, so can be max Integer.MAX_VALUE
+        var segmentCount = (int) (fileSize / segmentSize);
+        var results = IntStream.range(0, segmentCount)
+                .mapToObj(segmentNr -> parseSegment(file, fileSize, segmentSize, segmentNr))
+                .reduce(StationList::merge)
+                .orElseGet(StationList::new)
+                .toStringArray();
         Arrays.sort(results);
         System.out.println(String.join("\n", results));
     }
 
-    private static StationList parse(File file) {
+    private static StationList parseSegment(File file, long fileSize, int segmentSize, int segmentNr) {
+        long segmentStart = segmentNr * (long) segmentSize;
+        long segmentEnd = Math.min(fileSize, segmentStart + segmentSize + 100);
         try (var fileChannel = (FileChannel) Files.newByteChannel(file.toPath(), StandardOpenOption.READ)) {
-            long fileLength = file.length();
-            var bb = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileLength);
+            var bb = fileChannel.map(FileChannel.MapMode.READ_ONLY, segmentStart, segmentEnd - segmentStart);
+            if (segmentStart > 0) {
+                // noinspection StatementWithEmptyBody
+                while (bb.get() != '\n')
+                    ; // skip to first new line
+            }
             StationList stationList = new StationList();
             var buffer = new byte[100];
-            while (bb.position() < fileLength) {
+            while (bb.position() < segmentSize) {
                 byte b;
                 var i = 0;
                 while ((b = bb.get()) != ';') {
@@ -52,6 +66,7 @@ public class Solution {
                 while ((b = bb.get()) != '\n') {
                     value[j++] = b;
                 }
+
                 String valueString = new String(value, 0, j, StandardCharsets.UTF_8);
                 stationList.add(new String(buffer, 0, i, StandardCharsets.UTF_8), Double.parseDouble(valueString));
             }
@@ -65,6 +80,7 @@ public class Solution {
 
     private static final class Station {
         private final String name;
+
         private double min;
         private double max;
         private double total;
@@ -121,6 +137,12 @@ public class Solution {
                 destination[i++] = station.toString();
 
             return destination;
+        }
+
+        public StationList merge(StationList other) {
+            for (Station station : other)
+                add(station);
+            return this;
         }
 
         @Override
