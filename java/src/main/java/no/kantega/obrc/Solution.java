@@ -35,6 +35,7 @@ public class Solution {
         var segmentCount = (int) (fileSize / segmentSize);
         var results = IntStream.range(0, segmentCount)
                 .mapToObj(segmentNr -> parseSegment(file, fileSize, segmentSize, segmentNr))
+                .parallel()
                 .reduce(StationList::merge)
                 .orElseGet(StationList::new)
                 .toStringArray();
